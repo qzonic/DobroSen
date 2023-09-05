@@ -1,0 +1,1138 @@
+openapi: 3.0.2
+info:
+  title: 'ToDo API'
+  version: 'v1'
+  description: |
+    Запросы к API начинаются с `/api/v1/`
+    # Описание
+    Проект представляет из себя расширенный функционал ToDo-списка, добавлена возможность присваивать задачам категории и поддержку пользовательских аккаунтов.
+    Дополнительно было реализоавнно:
+    * При создании задачи, полбзователь, который указан в `assigned_to`, получает уведомление на почту.
+    * Возможность прикрепления файлов к задачам..
+    * Сортировка и пагинация для списка задач.
+    * Возможность устанавливать срок выполнения для задачи.
+    * Возможность создавать подзадачи.
+    * Добавлен приоритет к задачам и сортировка по нему.
+    * Добавлена возможность проанализировать выполнение своих задач.
+    * Тесты для основного функционала приложения.
+    # Алгоритм регистрации пользователей
+    1. Пользователь отправляет POST-запрос на добавление нового пользователя с параметрами `username` и `password` на эндпоинт `auth/users/`.
+    2. API возвращает данные зарегистрированного пользователя
+    3. Пользователь отправляет POST-запрос с параметрами `username` и `password` на эндпоинт `auth/jwt/create/`, в ответе на запрос ему приходят `refresh` и `access` токены.
+tags:
+  - name: AUTH
+    description: Регистрация пользователей и выдача токенов
+  - name: CATEGORY
+    description: |
+      Просмотреть информацию о доступных категориях. Добавление новых категорий доступно только авторизованным пользователям.
+  - name: TASK
+    description: |
+      Просмотреть информацию о доступных задачах. Добавление новых задач доступно только авторизованным пользователям.
+  - name: SUBTASK
+    description: |
+      Просмотреть информацию о доступных подзадачах к задаче. Добавление новых подзадач доступно только авторизованным пользователям.
+paths:
+  /api/v1/auth/users/:
+    post:
+      operationId: Регистрация
+      description: Регистрирует пользователя с переданными `username` и `password`
+      parameters: [ ]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreate'
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserCreate'
+          description: 'Пользователь создан'
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: 'Отсутствует обязательное поле или оно некорректно'
+      tags:
+        - AUTH
+  /api/v1/auth/jwt/create/:
+    post:
+      operationId: Получение токена
+      description: Возвращает access и refresh токен, если переданные данные корректные
+      parameters: [ ]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenObtainPair'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenCreate'
+          description: 'Токен создан'
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: 'Отсутствует обязательное поле или оно некорректно'
+        '401':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+            description: 'Переданы некорректные данные'
+      tags:
+        - AUTH
+  /api/v1/auth/jwt/refresh/:
+    post:
+      operationId: Обновить access токен
+      description: Обновляет access токен, если переданный refresh токен корректный
+      parameters: [ ]
+      requestBody:
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              refresh:
+                type: string
+            required:
+              - refresh
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenRefresh'
+          description: 'Токен обновлен'
+          '401':
+            content:
+              application/json:
+                schema:
+                  type: object
+                  properties:
+                    detail:
+                      type: string
+                    code:
+                      type: string
+            description: 'Некорректный refresh токен'
+      tags:
+        - AUTH
+
+  /api/v1/category/:
+    get:
+      operationId: Список категорий
+      description: "Просмотр списка категорий"
+      parameters:
+        - name: search
+          in: query
+          description: Поиск по параметрам `name` и `id`
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                    example: 123
+                    description: 'Общее количество объектов в базе'
+                  next:
+                    type: string
+                    nullable: true
+                    format: uri
+                    example: http://127.0.0.1:8000/api/category/?page=4
+                    description: 'Ссылка на следующую страницу'
+                  previous:
+                    type: string
+                    nullable: true
+                    format: uri
+                    example: http://127.0.0.1:8000/api/category/?page=2
+                    description: 'Ссылка на предыдущую страницу'
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Category'
+                    description: 'Список объектов текущей страницы'
+          description: Отображение списка категорий
+      tags:
+        - CATEGORY
+    post:
+      operationId: Добавить категорию
+      description: |
+        Добавление категорий доступно только авторизованным пользователям.
+      parameters: [ ]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryWrite'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CategoryWrite'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CategoryWrite'
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+          description: 'Контакт успешно добавлен'
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: 'Ошибка валидации'
+        '401':
+          сontent:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+          description: 'Отсутствует токен'
+      tags:
+        - CATEGORY
+  /api/v1/tasks/:
+    get:
+      operationId: Список назначенных задач
+      description: "Просмотр списка назначенных задач"
+      parameters:
+        - name: category
+          in: query
+          description: Фильтрация по названию категории.
+          schema:
+            type: string
+        - name: ordering
+          in: query
+          description: Сортировка по приортету.
+          example: '?ordering=-priority'
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                    example: 123
+                    description: 'Общее количество объектов в базе'
+                  next:
+                    type: string
+                    nullable: true
+                    format: uri
+                    example: http://127.0.0.1:8000/api/tasks/?page=4
+                    description: 'Ссылка на следующую страницу'
+                  previous:
+                    type: string
+                    nullable: true
+                    format: uri
+                    example: http://127.0.0.1:8000/api/tasks/?page=2
+                    description: 'Ссылка на предыдущую страницу'
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Task'
+                    description: 'Список объектов текущей страницы'
+          description: Отображение списка назначенных задач
+      tags:
+        - TASK
+
+  /api/tasks/<int:id>/:
+    get:
+      operationId: Получение конкретной назаначенной задачи
+      description: Просмотреть конкретную назаначенную задачу по ее id
+      parameters: [ ]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+          description: Задача найдена
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+          description: 'Задачи с таким id нет'
+      tags:
+        - TASK
+    put:
+      operationId: Полное редактирование задачи
+      description: |
+        Редактирование задачи доступно только тому кому назначена задача и создателю.
+      parameters: [ ]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignedTaskPatch'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AssignedTaskPatch'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AssignedTaskPatch'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+          description: 'Задача успешно обновлена'
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: 'Отсутствует обязательное поле или оно некорректно'
+        '401':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+          description: 'Отсутствует токен'
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+              description: 'Задача с таким id не найдена'
+      tags:
+        - TASK
+    patch:
+      operationId: Частичное редактирование назначенной задачи
+      description: |
+        Редактирование задачи доступно только тому кому назначена задача и создателю.
+      parameters: [ ]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignedTaskPatch'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AssignedTaskPatch'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AssignedTaskPatch'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+          description: 'Задача успешно обновлена'
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: 'Отсутствует обязательное поле или оно некорректно'
+        '401':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+          description: 'Отсутствует токен'
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+            description: 'Задача с таким id не найдена'
+      tags:
+        - TASK
+
+  /api/v1/tasks/statistics/:
+    get:
+      operationId: Просмотреть статистику по задачам
+      description: "Просмотр статистики по задачам"
+      parameters: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tasks_count:
+                    type: integer
+                    example: 123
+                    description: 'Общее количество задач'
+                  average_time:
+                    type: string
+                    example: "128.4546"
+                    description: 'Среднее время выполнения задач'
+                  completed_tasks_count:
+                    type: string
+                    example: 12
+                    description: 'Количество завершенных задач'
+                  uncompleted_tasks_count:
+                    type: string
+                    example: 12
+                    description: 'Количество не завершенных задач'
+                  overdue_tasks_count:
+                    type: array
+                    example: 0
+                    description: 'Количество просроченных задач'
+          description: Отображение статистики
+        '401':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+          description: 'Отсутствует токен'
+      tags:
+        - TASK
+
+  /api/v1/creation-tasks/:
+    get:
+      operationId: Список созданных задач
+      description: "Просмотр списка созданных задач"
+      parameters:
+        - name: category
+          in: query
+          description: Фильтрация по названию категории.
+          schema:
+            type: string
+        - name: ordering
+          in: query
+          description: Сортировка по приортету.
+          example: '?ordering=-priority'
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                    example: 123
+                    description: 'Общее количество объектов в базе'
+                  next:
+                    type: string
+                    nullable: true
+                    format: uri
+                    example: http://127.0.0.1:8000/api/creation-tasks/?page=4
+                    description: 'Ссылка на следующую страницу'
+                  previous:
+                    type: string
+                    nullable: true
+                    format: uri
+                    example: http://127.0.0.1:8000/api/creation-tasks/?page=2
+                    description: 'Ссылка на предыдущую страницу'
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Task'
+                    description: 'Список объектов текущей страницы'
+          description: Отображение списка назначенных задач
+      tags:
+        - TASK
+    post:
+      operationId: Добавить задачу
+      description: |
+        Добавление задач доступно только авторизованным пользователям.
+      parameters: [ ]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskWrite'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TaskWrite'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TaskWrite'
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+          description: 'Контакт успешно добавлен'
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: 'Ошибка валидации'
+        '401':
+          сontent:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+          description: 'Отсутствует токен'
+      tags:
+        - TASK
+  /api/creation-tasks/<int:id>/:
+    get:
+      operationId: Получение конкретной созданной задачи
+      description: Просмотреть конкретную созданную задачу по ее id
+      parameters: [ ]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+          description: Задача найдена
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+          description: 'Задачи с таким id нет'
+      tags:
+        - TASK
+    put:
+      operationId: Полное редактирование задачи
+      description: |
+        Редактирование задачи доступно только создателю.
+      parameters: [ ]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskPatch'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TaskPatch'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AssignedTaskPatch'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+          description: 'Задача успешно обновлена'
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: 'Отсутствует обязательное поле или оно некорректно'
+        '401':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+          description: 'Отсутствует токен'
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+              description: 'Задача с таким id не найдена'
+      tags:
+        - TASK
+    patch:
+      operationId: Частичное редактирование созданной задачи
+      description: |
+        Редактирование задачи доступно только создателю.
+      parameters: [ ]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskPatch'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TaskPatch'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TaskPatch'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+          description: 'Задача успешно обновлена'
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: 'Отсутствует обязательное поле или оно некорректно'
+        '401':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+          description: 'Отсутствует токен'
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+            description: 'Задача с таким id не найдена'
+      tags:
+        - TASK
+    delete:
+      operationId: Удалить задачу
+      description: Удаление задачи доступно только автору
+      parameters: [ ]
+      responses:
+        '204':
+          description: 'Задача удалена'
+        '401':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+          description: 'Отсутствует токен'
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+          description: 'Задача с таким id не найдена'
+      tags:
+        - TASK
+
+  /api/v1/<int:task_id>/subtasks/:
+    get:
+      operationId: Список подзадач
+      description: "Просмотр списка подзадач"
+      parameters: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                    example: 123
+                    description: 'Общее количество объектов в базе'
+                  next:
+                    type: string
+                    nullable: true
+                    format: uri
+                    example: http://127.0.0.1:8000/api/1/subtasks/?page=4
+                    description: 'Ссылка на следующую страницу'
+                  previous:
+                    type: string
+                    nullable: true
+                    format: uri
+                    example: http://127.0.0.1:8000/api/1/subtasks/?page=2
+                    description: 'Ссылка на предыдущую страницу'
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SubTask'
+                    description: 'Список объектов текущей страницы'
+          description: Отображение списка подзадач
+      tags:
+        - SUBTASK
+    post:
+      operationId: Добавить подзадачу
+      description: |
+        Добавление задач доступно только создатель и тот кому она назаначена.
+      parameters: [ ]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubTaskWrite'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SubTaskWrite'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SubTaskWrite'
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubTask'
+          description: 'Подзадача успешно добавлена'
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: 'Ошибка валидации'
+        '401':
+          сontent:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+          description: 'Отсутствует токен'
+      tags:
+        - TASK
+  /api/v1/<int:task_id>/subtasks/<int:subtask_id>/:
+    get:
+      operationId: Получение конкретной подзадачи
+      description: Просмотреть конкретную созданную задачу по task_id и subtask_id
+      parameters: [ ]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubTask'
+          description: Подзадача найдена
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+          description: 'Подзадачи с таким id нет'
+      tags:
+        - SUBTASK
+    put:
+      operationId: Полное редактирование подзадачи
+      description: |
+        Редактирование задачи доступно только создателю и тому кому назначена задача.
+      parameters: [ ]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubTaskWrite'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SubTaskWrite'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SubTaskWrite'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubTask'
+          description: 'Подзадача успешно обновлена'
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: 'Отсутствует обязательное поле или оно некорректно'
+        '401':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+          description: 'Отсутствует токен'
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+              description: 'Подзадача с такими id не найдена'
+      tags:
+        - SUBTASK
+    patch:
+      operationId: Частичное редактирование подзадачи
+      description: |
+        Редактирование задачи доступно только создателю и тому кому назначена задача.
+      parameters: [ ]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubTaskWrite'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SubTaskWrite'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SubTaskWrite'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubTask'
+          description: 'Задача успешно обновлена'
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+          description: 'Отсутствует обязательное поле или оно некорректно'
+        '401':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+          description: 'Отсутствует токен'
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+            description: 'Задача с таким id не найдена'
+      tags:
+        - TASK
+    delete:
+      operationId: Удалить подзадачу
+      description: Удаление задачи доступно только создателю и тому кому назначена задача
+      parameters: [ ]
+      responses:
+        '204':
+          description: 'Задача удалена'
+        '401':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+          description: 'Отсутствует токен'
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+          description: 'Задача с таким id не найдена'
+      tags:
+        - SUBTASK
+components:
+  schemas:
+    User:
+      title: Объект пользовател
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Id пользователя
+        username:
+          type: string
+          description: Ник пользователя
+    Category:
+      title: Объект категории
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Id категории
+        name:
+          type: string
+          description: Название категории
+    CategoryWrite:
+      title: Добавление или изменение категории
+      type: object
+      properties:
+        name:
+          type: string
+          description: Название категории
+      required:
+        - name
+    Task:
+      title: Объект задачи
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Id задачи
+        title:
+          type: string
+          description: Название задачи
+        description:
+          type: string
+          description: Описание задачи
+        created_at:
+          type: string
+          description: Дата создания
+        due_date:
+          type: string
+          description: Срок выполнения
+        category:
+          $ref: '#/components/schemas/Category'
+          description: Категория
+        file:
+          type: string
+          description: Ссылка на файл
+        creator:
+          $ref: '#/components/schemas/User'
+          description: Создатель задачи
+        assigned_to:
+          $ref: '#/components/schemas/User'
+          description: Кому назначена задача
+        priority:
+          type: string
+          description: Приоритет
+        subtasks:
+          $ref: '#/components/schemas/SubTask'
+          description: Подзадачи
+        is_completed:
+          type: boolean
+          description: Выполнена или нет
+    TaskWrite:
+      title: Добавление или изменение задачи
+      type: object
+      properties:
+        title:
+          type: string
+          description: Название задачи
+        description:
+          type: string
+          description: Описание задачи
+        due_date:
+          type: string
+          description: Срок выполнения
+        category:
+          type: integer
+          description: Id категории
+        file:
+          type: string
+          format: binary
+          description: Файл
+        assigned_to:
+          type: integer
+          description: Id того кому назначена задача
+        priority:
+          type: integer
+          min: 0
+          max: 2
+          description: Приоритет
+        subtasks:
+          type: integer
+          description: Id подзадачи
+        is_completed:
+          type: boolean
+          description: Выполнена или нет
+      required:
+        - title
+        - description
+        - category
+        - assigned_to
+    TaskPatch:
+      title: Частичное изменение созданной задачи
+      type: object
+      properties:
+        title:
+          type: string
+          description: Название задачи
+        description:
+          type: string
+          description: Описание задачи
+        due_date:
+          type: string
+          description: Срок выполнения
+        category:
+          type: integer
+          description: Id категории
+        file:
+          type: string
+          format: binary
+          description: Файл
+        assigned_to:
+          type: integer
+          description: Id того кому назначена задача
+        priority:
+          type: integer
+          min: 0
+          max: 2
+          description: Приоритет
+        subtasks:
+          type: integer
+          description: Id подзадачи
+        is_completed:
+          type: boolean
+          description: Выполнена или нет
+    AssignedTaskPatch:
+      title: Частичное изменение назначенной задачи
+      type: object
+      properties:
+        due_date:
+          type: string
+          description: Срок выполнения
+        file:
+          type: string
+          format: binary
+          description: Файл
+        is_completed:
+          type: boolean
+          description: Выполнена или нет
+    SubTask:
+      title: Подзадача
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Id подзадачи
+        title:
+          type: string
+          description: Название подзадачи
+        description:
+          type: string
+          description: Описание подзадачи
+        is_completed:
+          type: boolean
+          description: Выполнена или нет
+    SubTaskWrite:
+      title: Добавление или изменение подзадачи
+      type: object
+      properties:
+        title:
+          type: string
+          description: Название подзадачи
+        description:
+          type: string
+          description: Описание подзадачи
+        is_completed:
+          type: boolean
+          description: Выполнена или нет
+      required:
+        - title
+        - description
+    ValidationError:
+      title: Ошибка валидации
+      type: object
+      properties:
+        field_name:
+          type: array
+          items:
+            type: string
+    PermissionDenied:
+      type: object
+      properties:
+        detail:
+          description: 'Описание ошибки'
+          example: "У вас недостаточно прав для выполнения данного действия."
+          type: string
+    UserCreate:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        username:
+          type: string
+          description: Required. 150 characters or fewer. Letters, digits and @/./+/-/_
+            only.
+          pattern: ^[\w.@+-]+\z
+          maxLength: 150
+        id:
+          type: integer
+          readOnly: true
+        password:
+          type: string
+          writeOnly: true
+      required:
+        - username
+        - password
+    TokenObtainPair:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          writeOnly: true
+      required:
+        - username
+        - password
+    TokenRefresh:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+      required:
+        - refresh
+    TokenCreate:
+      type: object
+      properties:
+        refresh:
+          type: string
+        access:
+          type: string

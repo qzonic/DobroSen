@@ -1,0 +1,11 @@
+celery==5.3.4
+Django==3.2
+django-filter==23.2
+djangorestframework==3.14.0
+djangorestframework-simplejwt==4.7.2
+djoser==2.1.0
+flake8==5.0.4
+gunicorn==20.0.4
+psycopg2-binary==2.9.7
+redis==5.0.0
+python-dotenv==0.21.1
