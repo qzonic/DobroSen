@@ -81,5 +81,9 @@ jobs:
             sudo echo DB_PORT=${{ secrets.DB_PORT }} >> .env
             sudo echo HOST=${{ secrets.HOST }} >> .env
             sudo echo DEBUG=${{ secrets.DEBUG }} >> .env
+            sudo echo DB_HOST=${{ secrets.REDIS_HOST }} >> .env
+            sudo echo DB_PORT=${{ secrets.REDIS_PORT }} >> .env
+            sudo echo HOST=${{ secrets.EMAIL_HOST_USER }} >> .env
+            sudo echo DEBUG=${{ secrets.EMAIL_HOST_PASSWORD }} >> .env
             
             sudo docker-compose up -d
